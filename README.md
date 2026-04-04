@@ -28,3 +28,34 @@ In this milestone, we upgraded our server from simply reading a request to actua
     * We use `\r\n` (carriage return and line feed) to separate lines, which is the standard line ending for HTTP headers.
     * Crucially, we use `\r\n\r\n` to create a blank line. In the HTTP protocol, this blank line is the signal to the browser that the headers are finished and the actual body (our HTML `contents`) is about to begin.
 * **`stream.write_all(response.as_bytes()).unwrap();`**: Finally, we convert our perfectly formatted `response` string into raw bytes and write them directly back into the TCP stream. This sends the data over the network to the waiting browser.
+
+### Reflection 3
+
+![Commit 3 screen capture](/assets/images/commit3.png)
+
+In milestone 3, we upgraded the server from returning the same HTML page for every request to selectively responding based on the requested URL path. We also applied some basic code refactoring. Here is a breakdown of what was done and why:
+
+**1. Splitting the Response (Validating Requests)**
+
+To respond differently to different requests, we first needed to isolate the exact request line (e.g., `GET / HTTP/1.1`). 
+* We used `buf_reader.lines().next().unwrap().unwrap()` to grab just the first line of the HTTP request.
+* We then introduced an `if / else` block. If the `request_line` exactly matches `"GET / HTTP/1.1"` (meaning the user is asking for the root of the website), we serve them `hello.html` with a `200 OK` status. 
+* If they request *anything else* (triggering the `else` block), we serve a newly created `404.html` error page alongside a `404 NOT FOUND` status line.
+
+**2. Why the Refactoring is Needed**
+
+Initially, writing out the `if / else` blocks resulted in a lot of duplicated code. Both blocks contained the exact same logic for reading a file to a string, calculating its length, formatting the HTTP response, and writing it back to the TCP stream. The *only* things that actually differed were the `status_line` and the `filename`.
+
+Refactoring is necessary here to adhere to the **DRY (Don't Repeat Yourself)** principle. By pulling the differing values into a tuple:
+```rust
+let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
+    ("HTTP/1.1 200 OK", "hello.html")
+} else {
+    ("HTTP/1.1 404 NOT FOUND", "404.html")
+};
+```
+...we can run the file-reading and response-writing code unconditionally just *once* at the end of the method. 
+
+**The main benefits of this refactoring are:**
+* **Conciseness:** The code is much shorter and easier to read.
+* **Maintainability:** If we ever need to change how the server reads files or formats the final HTTP response string, we only have to update the code in *one* place, rather than updating it inside every single `if/else` branch we create in the future.
