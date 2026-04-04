@@ -59,3 +59,21 @@ let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
 **The main benefits of this refactoring are:**
 * **Conciseness:** The code is much shorter and easier to read.
 * **Maintainability:** If we ever need to change how the server reads files or formats the final HTTP response string, we only have to update the code in *one* place, rather than updating it inside every single `if/else` branch we create in the future.
+
+### Reflection 4
+
+In milestone 4, we simulated a slow request to observe the limitations of our current single-threaded server design. Here is a breakdown of the changes and what they demonstrate:
+
+**1. Refactoring to a `match` Statement**
+
+As we added a third possible route (the slow request), continuing to use `if / else if / else` blocks would quickly become messy. We refactored the routing logic to use Rust's `match` statement. This makes the code much cleaner and easier to extend in the future. We match the `request_line` against known HTTP GET patterns, and use the `_` (catch-all) arm to handle any unmapped requests by returning the 404 page.
+
+**2. The `/sleep` Endpoint and Blocking**
+
+We introduced a new route: `"GET /sleep HTTP/1.1"`. When a user requests this path, we execute `thread::sleep(Duration::from_secs(10));`. This manually pauses the server's execution for 10 seconds before returning the standard `hello.html` response.
+
+**3. The Single-Threaded Bottleneck**
+
+By opening two browser windows—requesting `/sleep` in the first and `/` in the second—we immediately see the core problem. Because our server operates on a single thread, it processes requests synchronously (one at a time). 
+
+When the server receives the `/sleep` request, the *entire* program halts for 10 seconds. The second request to `/` arrives at the server, but it is forced to wait in a queue until the first 10-second sleep is completely finished. This demonstrates that in a single-threaded architecture, one slow or resource-heavy request will block all subsequent incoming connections, leading to unacceptable delays for other users. This sets the stage for implementing a Thread Pool to handle concurrent requests.
