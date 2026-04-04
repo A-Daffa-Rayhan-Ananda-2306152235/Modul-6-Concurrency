@@ -12,3 +12,19 @@ In milestone 1, we implemented a single-threaded web server that listens for inc
 * **`.collect()`**: This takes all the yielded string items from the iterator chain and collects them into a data structure. We specified the type `Vec<_>`, so Rust infers it should collect these lines into a Vector (a growable array) of Strings. 
 
 Finally, `println!("{:#?}", http_request);` takes that vector and pretty-prints it to the console, allowing us to inspect the raw HTTP request sent by the browser.
+
+### Reflection 2
+
+![Commit 2 screen capture](/assets/images/commit2.png)
+
+In this milestone, we upgraded our server from simply reading a request to actually sending back a valid HTTP response containing an HTML page. Here is a breakdown of the new code added to `handle_connection`:
+
+* **`let status_line = "HTTP/1.1 200 OK";`**: This defines the standard HTTP success response. It tells the browser that the request was received, understood, and accepted.
+* **`let contents = fs::read_to_string("hello.html").unwrap();`**: We use Rust's standard filesystem module (`std::fs`) to read the entire contents of our `hello.html` file into a string. The `unwrap()` method handles potential errors (like if the file is missing) by panicking and stopping the program.
+* **`let length = contents.len();`**: We calculate the size of our HTML payload. This is crucial for the HTTP headers.
+* **`let response = format!(...);`**: Here we construct the raw HTTP response exactly as the protocol requires:
+    * First, we send the `status_line`.
+    * Next, we send the `Content-Length` header. This tells the browser exactly how many bytes of data to expect in the body, ensuring it knows when the response is complete.
+    * We use `\r\n` (carriage return and line feed) to separate lines, which is the standard line ending for HTTP headers.
+    * Crucially, we use `\r\n\r\n` to create a blank line. In the HTTP protocol, this blank line is the signal to the browser that the headers are finished and the actual body (our HTML `contents`) is about to begin.
+* **`stream.write_all(response.as_bytes()).unwrap();`**: Finally, we convert our perfectly formatted `response` string into raw bytes and write them directly back into the TCP stream. This sends the data over the network to the waiting browser.
