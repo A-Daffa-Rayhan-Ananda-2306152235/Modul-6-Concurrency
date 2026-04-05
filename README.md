@@ -77,3 +77,27 @@ We introduced a new route: `"GET /sleep HTTP/1.1"`. When a user requests this pa
 By opening two browser windows—requesting `/sleep` in the first and `/` in the second—we immediately see the core problem. Because our server operates on a single thread, it processes requests synchronously (one at a time). 
 
 When the server receives the `/sleep` request, the *entire* program halts for 10 seconds. The second request to `/` arrives at the server, but it is forced to wait in a queue until the first 10-second sleep is completely finished. This demonstrates that in a single-threaded architecture, one slow or resource-heavy request will block all subsequent incoming connections, leading to unacceptable delays for other users. This sets the stage for implementing a Thread Pool to handle concurrent requests.
+
+### Reflection 5
+
+In milestone 5, we solved the single-threaded bottleneck by transforming our server to handle concurrent requests using a `ThreadPool`. Here is a breakdown of how it works and the Rust concepts involved:
+
+**1. Why a Thread Pool instead of `thread::spawn`?**
+
+We could have solved the blocking issue by spawning a brand-new thread for every single incoming request using `thread::spawn`. However, if the server receives a massive spike in traffic (or a malicious Denial of Service attack), spawning an unlimited number of threads would exhaust the system's memory and CPU resources, causing the server to crash. 
+
+A `ThreadPool` solves this by creating a *fixed* number of threads (e.g., 4) when the server starts. Incoming requests are placed in a queue, and the threads pull tasks from this queue as they become available. This guarantees we never exceed our resource limits.
+
+**2. How the ThreadPool communicates: Channels (`mpsc`)**
+
+To get the main thread to hand off requests to the worker threads, we use a Multiple Producer, Single Consumer (`mpsc`) channel. 
+* The **ThreadPool** holds the *Sender* half of the channel. When a new connection comes in, the pool wraps the `handle_connection` closure into a `Job` and sends it down the channel.
+* The **Workers** hold the *Receiver* half of the channel and constantly listen for new jobs to execute.
+
+**3. Sharing the Receiver: `Arc<Mutex<T>>`**
+
+This was the most complex part of the refactoring. A channel only has one receiver, but we have multiple worker threads that all need to listen to it. 
+* We use a **`Mutex` (Mutual Exclusion)** to ensure that only *one* worker thread can pull a job from the receiver at any given time, preventing race conditions.
+* We wrap the `Mutex` in an **`Arc` (Atomic Reference Counted pointer)**. Standard pointers can only have one owner, but `Arc` allows multiple threads to safely share ownership of the `Mutex` holding the receiver.
+
+Now, if you open two browser windows and request `/sleep` in one and `/` in the other, the `/` request will load instantly because it is being handled by a separate, available worker thread, while the first thread handles the 10-second delay.
