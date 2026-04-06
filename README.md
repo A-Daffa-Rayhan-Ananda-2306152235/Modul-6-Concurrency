@@ -101,3 +101,26 @@ This was the most complex part of the refactoring. A channel only has one receiv
 * We wrap the `Mutex` in an **`Arc` (Atomic Reference Counted pointer)**. Standard pointers can only have one owner, but `Arc` allows multiple threads to safely share ownership of the `Mutex` holding the receiver.
 
 Now, if you open two browser windows and request `/sleep` in one and `/` in the other, the `/` request will load instantly because it is being handled by a separate, available worker thread, while the first thread handles the 10-second delay.
+
+### Bonus Reflection
+
+In this bonus section, we improved the error handling of our `ThreadPool` creation by replacing the `new` function with a `build` function. Here is a reflection on why this change is important in Rust:
+
+**1. Why the original `new` function was problematic**
+
+In our initial implementation, `ThreadPool::new(size)` used an `assert!(size > 0);` statement. This means if we accidentally tried to create a ThreadPool with `0` threads (which makes no sense and would break the server), the `assert!` macro would cause the entire program to immediately panic and crash. 
+
+```rust
+// Example of how `new` fails:
+let pool = ThreadPool::new(0); // This will PANIC and crash the program!
+```
+
+**2. The Rust Convention: `new` vs `build`**
+
+In idiomatic Rust, functions named `new` are generally expected to *always* succeed. Developers calling a `new` method do not expect it to panic or return an error. If the instantiation of a struct can fail (due to invalid inputs, like a size of 0), it is a best practice to use a different name, commonly `build`.
+
+**3. Returning a `Result`**
+
+By changing the function to `build`, we also change its return type. Instead of directly returning a `ThreadPool`, it now returns a `Result<ThreadPool, PoolCreationError>` (or a similar error type). 
+
+This is a massive improvement for the reliability of the application. It forces the caller of the function to explicitly handle the `Result`. If someone tries to pass a `size` of `0`, the `build` function safely returns an `Err`, allowing the program to handle the mistake gracefully (e.g., by logging an error message and falling back to a default thread count) rather than abruptly crashing the entire server.
